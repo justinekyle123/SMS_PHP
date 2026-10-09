@@ -26,6 +26,27 @@ function normalizeSmsNumber(mixed $value): ?string
     return preg_match('/^\+639\d{9}$/', $number) ? $number : null;
 }
 
+$isHealthRequest = $_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['health'] ?? '') === '1';
+if ($isHealthRequest) {
+    $expectedKey = smsEnvironment('READY_ALERT_SMS_API_KEY');
+    $providedKey = $_SERVER['HTTP_X_READY_ALERT_KEY'] ?? '';
+    if ($expectedKey === '' || !hash_equals($expectedKey, $providedKey)) {
+        smsJson(['connected' => false, 'error' => 'Unauthorized.'], 401);
+    }
+
+    try {
+        smsDatabase();
+        smsJson([
+            'connected' => true,
+            'service' => 'railway',
+            'storage' => 'sqlite',
+            'gatewayConfigured' => smsEnvironment('SMS_GATEWAY_USERNAME') !== '' && smsEnvironment('SMS_GATEWAY_PASSWORD') !== '',
+        ]);
+    } catch (Throwable $error) {
+        smsJson(['connected' => false, 'error' => 'SMS storage is unavailable.'], 503);
+    }
+}
+
 $isJsonRequest = str_contains(strtolower($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json');
 if ($isJsonRequest) {
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') smsJson([], 204);
